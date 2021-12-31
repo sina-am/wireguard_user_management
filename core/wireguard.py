@@ -1,24 +1,26 @@
-from database import DataBase
 from configuration import ConfigManager
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+from models import UserModel, Base
+from exceptions import *
 from ipaddress import IPv4Address
 import os
 
 
 class WireGuardManager:
-    def __init__(self, db_path, table_name, config_path, server_address, server_port, dns):
-        self.db = DataBase(db_path)
-        self.table = table_name
-        self.db.execute(f'CREATE TABLE IF NOT EXISTS {self.table} ('
-                        'username varchar(20),'
-                        'first_name varchar(50),'
-                        'last_name varchar(50),'
-                        'ip_address varchar(15),'
-                        'private_key varchar(44),'
-                        'public_key varchar(44),'
-                        'config_file text'
-                        ');')
-        self.cm = ConfigManager(config_path, server_address, server_port, dns)
+    def __init__(self, database_path, wireguard_config_path, public_server_address, dns):
+        self.database_path = database_path
+        self.wireguard_config_path = wireguard_config_path
+        self.public_server_address = public_server_address
+        self.cm = ConfigManager(wireguard_config_path, public_server_address, dns)
+        self.session = self.initiate_database()
 
+    def initiate_database(self):
+        engine = create_engine(f'sqlite:///{self.database_path}', echo=False)
+        Base.metadata.create_all(engine)
+        return sessionmaker(bind=engine)()
+
+    # TODO: Not using wg
     @staticmethod
     def generate_key_pair():
         private_key = os.popen('wg genkey', 'r').read().replace('\n', '')
@@ -28,27 +30,39 @@ class WireGuardManager:
         os.remove('/tmp/private.key')
         return {'private': private_key, 'public': public_key}
 
+    # TODO: Automatically assign ip address
     def assign_address(self):
-        last_address = self.db.execute(f'SELECT ip_address FROM {self.table} ORDER BY ip_address DESC LIMIT 1')
-        if last_address:
-            return str(IPv4Address(last_address[0][0]) + 1)
-        else:
-            return str(IPv4Address(self.cm.address_range) + 1)
+        pass
 
-    def register_user(self, username, first_name, last_name):
+    def _check_if_assignable(self, address):
+        for peer in self.cm.peers:
+            if peer.address == address:
+                return False
+        return True
+
+    def register_user(self, username, first_name, last_name, address):
+        if not self._check_if_assignable(IPv4Address(address)):
+            raise IPAddressAlreadyExist('please assign a new address')
+
         key_pair = self.generate_key_pair()
-        address = self.assign_address()
         self.cm.add_peer(address, key_pair['public'])
         config_file = self.cm.generate_config(address, key_pair['public'], key_pair['private'])
-        self.db.execute(f'INSERT INTO {self.table} VALUES("{username}", "{first_name}",'
-                        f'"{last_name}", "{address}", "{key_pair["private"]}",'
-                        f'"{key_pair["public"]}", "{config_file}");')
+        user = UserModel(username=username,
+                         first_name=first_name,
+                         last_name=last_name,
+                         ipaddress=address,
+                         public_key=key_pair['public'],
+                         private_key=key_pair['private'],
+                         config_file=config_file
+                         )
+        self.session.add(user)
+        self.session.commit()
 
     def remove_user(self, username):
-        result = self.db.execute(f'SELECT public_key FROM {self.table} WHERE username="{username}";')
-        if not result:
-            raise ValueError('User does\'t exits')
-        public_key = result[0][0]
+        queryset = self.session.query(UserModel.public_key).filter(UserModel.username == username)
+        if not queryset.first():
+            raise UserDoesNotExist()
+        public_key = queryset.first()[0]
         self.cm.remove_peer(public_key)
-        self.db.execute(f'DELETE FROM {self.table} WHERE username="{username}";')
-
+        queryset.delete()
+        self.session.commit()
