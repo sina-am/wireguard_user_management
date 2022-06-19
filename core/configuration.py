@@ -1,4 +1,4 @@
-from core.exceptions import *
+from .exceptions import *
 from ipaddress import IPv4Address, IPv4Network
 from base64 import b64decode
 import os
@@ -75,6 +75,9 @@ class ConfigManager:
         raise WireGuardConfigFileError('Invalid syntax')
 
     def _find_peers(self):
+        # Check if there's any peer
+        if self._row_data.find('[Peer]') == -1:
+            return 
         row_peers = self._row_data[self._row_data.find('[Peer]'):].split('[Peer]')
         for row_peer in filter(None, row_peers):
             public_key, address = None, None
@@ -96,7 +99,7 @@ class ConfigManager:
                 with open(self.config_path, 'r') as fd:
                     return fd.read()
             raise PermissionError
-        raise FileNotFoundError
+        raise FileNotFoundError('Wireguard configuration file not found')
 
     def _write2file(self):
         with open(self.config_path, 'w') as fd:

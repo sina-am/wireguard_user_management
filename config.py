@@ -1,0 +1,4 @@
+WIREGUARD_PATH = './wg.conf'
+DATABASE_PATH = './users.db'
+PUBLIC_SERVER_ADDRESS = '192.168.1.1'
+DNS_ADDRESS = '8.8.8.8'

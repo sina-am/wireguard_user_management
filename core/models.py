@@ -5,7 +5,7 @@ Base = declarative_base()
 
 
 class UserModel(Base):
-    __tablename__ = 'user'
+    __tablename__ = 'users'
 
     username = Column(String, primary_key=True)
     first_name = Column(String)

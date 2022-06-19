@@ -2,6 +2,10 @@ class UserDoesNotExist(Exception):
     pass
 
 
+class UserAlreadyExist(Exception):
+    pass
+
+
 class PeerAlreadyExist(Exception):
     pass
 
