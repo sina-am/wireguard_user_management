@@ -1,33 +1,32 @@
 from operator import attrgetter
-from .configuration import ConfigManager
+
+from core.encryption import generate_key_pair, generate_public_key
+from core.configuration import ConfigManager
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from .models import UserModel, Base
-from .exceptions import *
-from ipaddress import IPv4Network
-import os
+from core.models import UserModel, Base
+from core.exceptions import *
+from ipaddress import IPv4Address, IPv4Network
 
 
 class WireGuardManager(ConfigManager):
-    def __init__(self, database_path, *args, **kwargs):
+    def __init__(self, database_path, public_server_address, dns, *args, **kwargs):
         self.database_path = database_path
         self.session = self.initiate_database()
+        self.public_server_address = IPv4Address(public_server_address)
+        self.dns = IPv4Address(dns)
         super().__init__(*args, **kwargs)
 
     def initiate_database(self):
         engine = create_engine(f'sqlite:///{self.database_path}', echo=False)
         Base.metadata.create_all(engine)
         return sessionmaker(bind=engine)()
-
-    # TODO: Not using wg
-    @staticmethod
-    def generate_key_pair():
-        private_key = os.popen('wg genkey', 'r').read().replace('\n', '')
-        with open('/tmp/private.key', 'w') as fd:
-            fd.write(private_key)
-        public_key = os.popen('wg pubkey < /tmp/private.key', 'r').read().replace('\n', '')
-        os.remove('/tmp/private.key')
-        return {'private': private_key, 'public': public_key}
+ 
+    def generate_config(self, address, peer_private_key):
+        server_public_key = generate_public_key(self.interface.private_key)
+        return f'[Interface]\nAddress = {address}\nPrivateKey = {peer_private_key}\n' \
+               f'DNS = {self.dns}\n\n[Peer]\nPublicKey = {server_public_key}\nEndpoint' \
+               f'= {self.public_server_address}:{self.interface.listening_port}\nAllowedIPs = 0.0.0.0/0\n'
 
     def assign_address(self):
         if self.peers:
@@ -53,9 +52,9 @@ class WireGuardManager(ConfigManager):
         if self.get_user(username):
             raise UserAlreadyExist('Duplicate username')
             
-        key_pair = self.generate_key_pair()
+        key_pair = generate_key_pair()
         self.add_peer(address, key_pair['public'])
-        config_file = self.generate_config(address, key_pair['public'], key_pair['private'])
+        config_file = self.generate_config(address, key_pair['private'])
         user = UserModel(
             username=username,
             first_name=first_name,

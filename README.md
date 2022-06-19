@@ -28,7 +28,7 @@ there're a few variables to change:
 
 
 ## Usage:
-Add a new user(peer):
+Add a new user(peer)
 ```
 $ wgm.py --add <username> <first name> <last name>
 ```
@@ -39,4 +39,8 @@ $ wgm.py --list
 Remove a user
 ```
 $ wgm.py --remove <username>
+```
+Show config file for peer
+``` 
+$ wgm.py --get-config <username>
 ```

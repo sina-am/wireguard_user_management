@@ -4,7 +4,12 @@ from core.wireguard import WireGuardManager
 from core.exceptions import UserAlreadyExist, UserDoesNotExist
 
 
-wg = WireGuardManager(DATABASE_PATH, WIREGUARD_PATH, PUBLIC_SERVER_ADDRESS, DNS_ADDRESS)
+wg = WireGuardManager(
+    database_path=DATABASE_PATH, 
+    config_path=WIREGUARD_PATH, 
+    public_server_address=PUBLIC_SERVER_ADDRESS, 
+    dns=DNS_ADDRESS
+)
 
 class AddNewUserAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -29,7 +34,13 @@ class ListUsersAction(argparse.Action):
                 f'\tFirst Name: {user.first_name}\n'
                 f'\tLast Name: {user.last_name}\n'
                 f'\tIP address: {user.ipaddress}\n'
-            )   
+            ) 
+
+class GenerateConfigurationAction(argparse.Action):  
+    def __call__(self, parser, namespace, values, option_string=None):
+        user = wg.get_user(*values)
+        print(user.config_file)
+
 
 def main():
     parser = argparse.ArgumentParser(description='Wireguard user manager')
@@ -49,6 +60,12 @@ def main():
         '--list', nargs=0,
         help='list users',
         action=ListUsersAction
+    )
+    parser.add_argument(
+        '--get-config', nargs=1,
+        metavar=('username'),
+        help='get user configuration file',
+        action=GenerateConfigurationAction
     )
     parser.parse_args()
 

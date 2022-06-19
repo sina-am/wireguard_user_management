@@ -27,26 +27,25 @@ class Peer:
 
 
 class Interface:
-    def __init__(self, listening_port, address, **kwargs):
+    def __init__(self, listening_port, address, private_key, **kwargs):
         if not listening_port.isnumeric():
             raise WireGuardConfigFileError('Invalid port number')
 
         self.listening_port = listening_port
         self.address = IPv4Network(address)
+        self.private_key = private_key
         self.directives = kwargs
 
     def __str__(self):
-        string = f'[Interface]\nAddress={self.address}\nListenPort={self.listening_port}\n'
+        string = f'[Interface]\nAddress={self.address}\nListenPort={self.listening_port}\nPrivateKey={self.private_key}\n'
         for key, value in self.directives.items():
             string += f'{key}={value}\n'
         return string
 
 
 class ConfigManager:
-    def __init__(self, config_path, public_server_address, dns):
+    def __init__(self, config_path):
         self.config_path = config_path
-        self.public_server_address = IPv4Address(public_server_address)
-        self.dns = IPv4Address(dns)
         self.peers = []
 
         self._row_data = self._read_file()
@@ -58,6 +57,7 @@ class ConfigManager:
         directives = {}
         listen_port = None
         address = None
+        private_key = None
         for line in filter(None, row_interface.splitlines()[1:]):
             if line.startswith('ListenPort') and '=' in line:
                 index = line.find('=')
@@ -65,13 +65,16 @@ class ConfigManager:
             elif line.startswith('Address') and '=' in line:
                 index = line.find('=')
                 address = line[index+1:].strip()
+            elif line.startswith('PrivateKey') and '=' in line:
+                index = line.find('=')
+                private_key = line[index+1:].strip()
             elif '=' in line:
                 index = line.find('=')
                 directives.setdefault(line[:index].strip(), line[index+1:].strip())
             else:
                 raise WireGuardConfigFileError('Invalid syntax')
-        if listen_port and address:
-            return Interface(listen_port, address, **directives)
+        if listen_port and address and private_key:
+            return Interface(listen_port, address, private_key, **directives)
         raise WireGuardConfigFileError('Invalid syntax')
 
     def _find_peers(self):
@@ -120,14 +123,6 @@ class ConfigManager:
             self._write2file()
         except ValueError:
             raise PeerNotFound('Peer not found')
-
-    def generate_config(self, address, public_key, private_key):
-        if public_key not in self.peers:
-            raise PeerNotFound('Peer not found')
-
-        return f'[Interface]\nAddress = {address}\nPrivateKey = {private_key}\n' \
-               f'DNS = {self.dns}\n\n[Peer]\nPublicKey = {public_key}\nEndpoint' \
-               f'= {self.public_server_address}:{self.interface.listening_port}\nAllowedIPs = 0.0.0.0/0\n'
 
     # TODO: Check for syntax error before restarting service
     def reload_service(self):
