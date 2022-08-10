@@ -39,8 +39,10 @@ class ListUsersAction(argparse.Action):
 class GenerateConfigurationAction(argparse.Action):  
     def __call__(self, parser, namespace, values, option_string=None):
         user = wg.get_user(*values)
-        print(user.config_file)
-
+        if user:
+            print(user.config_file)
+        else:
+            print("User does\'nt exist.")
 
 def main():
     parser = argparse.ArgumentParser(description='Wireguard user manager')
